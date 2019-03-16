@@ -1,0 +1,178 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.akaita.android.easylauncher'
+
+android {
+    lintOptions {
+        abortOnError false
+    }
+    signingConfigs {
+        config {
+            keyAlias 'fasoh'
+            storeFile file('/Users/fasoh/AndroidStudioProjects/samples/debug-like-a-boss/upload-keystore.jks')
+            storePassword '1nd[mbu'
+        }
+    }
+    compileSdkVersion 28
+    defaultConfig {
+        applicationId "com.fasoh.debugginglikeaboss"
+        minSdkVersion 18
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+    //build types will help us support the our different development environments
+    buildTypes {
+        debug {
+            applicationIdSuffix "debug"
+            debuggable true
+        }
+        acc {
+            initWith debug
+            debuggable true
+            applicationIdSuffix "acceptance"
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+    //flavors will help us build for the different countries
+    flavorDimensions "app"
+    productFlavors {
+        //flavour for kenya
+        ke {
+            applicationId "com.fasoh.debuglikeaboss.ke"
+            resValue "string", "app_name", 'KE Debug'
+        }
+        //flavor for tanzania
+        tz {
+            applicationId "com.fasoh.debuglikeaboss.tz"
+            resValue "string", "app_name", 'TZ Debug'
+        }
+    }
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
+    }
+}
+
+easylauncher {
+    iconNames "@mipmap/ic_launcher" // Traditional launcher icon
+    foregroundIconNames "@drawable/ic_launcher_foreground" // Foreground of adaptive launcher icon
+
+    buildTypes {
+        debug {
+            filters = customColorRibbonFilter("deb", "#DCDCDC", "#000000")
+        }
+
+        acc {
+            filters = customColorRibbonFilter("acc", "#DCDCDC", "#000000")
+        }
+
+        release { enable false }
+
+    }
+
+    productFlavors {
+        ke {
+
+        }
+        tz {
+
+        }
+    }
+}
+
+dependencies {
+    def everythingButRelease = [
+            'debugImplementation',
+            'accImplementation'
+    ]
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support:design:28.0.0'
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+
+    //Network stuff
+    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'com.squareup.retrofit2:retrofit:2.4.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.4.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:3.11.0'
+
+    //Logs
+    implementation 'com.jakewharton.timber:timber:4.7.1'
+
+    //Debugging guys for our acceptance and debug environment
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    everythingButRelease.each {
+        //chuck for okhttp
+        add(it, 'com.readystatesoftware.chuck:library:1.1.0')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-core:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-crash:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-recorder:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-build-config:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-geiger-counter:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-timber:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-build-config:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-attr:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-measurement:0.9.27')
+        add(it, 'com.willowtreeapps.hyperion:hyperion-disk:0.9.27')
+
+        //leak canary
+        add(it, 'com.squareup.leakcanary:leakcanary-android:1.6.3')
+        add(it, 'com.squareup.leakcanary:leakcanary-support-fragment:1.6.3')
+    }
+    //No debug tools should be compiled into our release
+    releaseImplementation 'com.readystatesoftware.chuck:library-no-op:1.1.0'
+    releaseImplementation 'com.willowtreeapps.hyperion:hyperion-core-no-op:0.9.27'
+    releaseImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.6.3'
+
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+}
+
+
+if (project.hasProperty('disableEasyLauncher')) {
+    tasks.whenTaskAdded { task ->
+        if (task.name.startsWith("easylauncher")) {
+            task.enabled = false
+        }
+    }
+}
+
+android.applicationVariants.all { variant ->
+    def buildTypeName = variant.buildType.name
+    Properties props = new Properties()
+    configProps(props, project.file("../props/config.properties"), project.file("../props/${buildTypeName}_config.properties"))
+
+    hostProperties(props, variant)
+
+    mergedFlavor.manifestPlaceholders = [
+            //you can as well do the launcher icon here
+            app_name: "@string/app_name"
+    ]
+}
+
+def configProps(Properties props, File... files) {
+    files.each {
+        it.withInputStream {
+            props.load(it)
+        }
+    }
+
+    return props
+}
+
+//Our network endpoints setup
+def hostProperties(props, variant) {
+
+    // HOSTS with DTAP support
+    variant.buildConfigField "String", 'SERVICE_ONE', "\"${props.getProperty('service_one')}\""
+    variant.buildConfigField "String", 'SERVICE_TWO', "\"${props.getProperty('service_two')}\""
+
+    variant.buildConfigField "long", "HOST_READ_TIMEOUT", "60"
+    variant.buildConfigField "long", "HOST_CONNECT_TIMEOUT", "60"
+}
